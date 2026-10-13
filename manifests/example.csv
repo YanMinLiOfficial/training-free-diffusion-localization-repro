@@ -1,0 +1,2 @@
+sample_id,spec_id,source_dataset,assigned_tool,authentic,image,mask
+example/0001,example-1,dataset,generator,authentic/0001.png,forged/0001.png,masks/0001.png

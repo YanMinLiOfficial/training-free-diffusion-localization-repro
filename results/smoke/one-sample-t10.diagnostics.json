@@ -1,0 +1,67 @@
+{
+  "protocol": {
+    "method": "dual conditional/unconditional reverse diffusion",
+    "model": "OpenAI ImageNet 256x256 unconditional guided-diffusion",
+    "model_sha256": "a37c32fffd316cd494cf3f35b339936debdc1576dad13fe57c42399a5dbc78b1",
+    "sag_commit": "a36f251dac2fc535e9d0670b86527df9eb1c661c",
+    "model_config": {
+      "image_size": 256,
+      "class_cond": false,
+      "learn_sigma": true,
+      "num_channels": 256,
+      "num_res_blocks": 2,
+      "channel_mult": "",
+      "num_heads": 4,
+      "num_head_channels": 64,
+      "num_heads_upsample": -1,
+      "attention_resolutions": "32,16,8",
+      "dropout": 0.0,
+      "diffusion_steps": 1000,
+      "noise_schedule": "linear",
+      "timestep_respacing": "",
+      "use_kl": false,
+      "predict_xstart": false,
+      "rescale_timesteps": false,
+      "rescale_learned_sigmas": false,
+      "use_checkpoint": false,
+      "use_scale_shift_norm": true,
+      "resblock_updown": true,
+      "use_fp16": true,
+      "use_new_attention_order": false,
+      "sel_attn_block": "output",
+      "sel_attn_depth": 2
+    },
+    "seed": 11,
+    "forward_ssim_threshold": 0.2,
+    "fixed_timestep": 10,
+    "max_timestep": 400,
+    "timestep_stride": 1,
+    "similarity_metric": "negative mean squared error to matched forward x_t; paper leaves D unspecified",
+    "similarity_scale": 10000.0,
+    "attention_scale": 1.3,
+    "attention_threshold": 1.3,
+    "blur_sigma": 3.0,
+    "srm_filters": "three fixed 5x5 residual kernels; paper filter bank unspecified",
+    "attention_source": "SAG output block depth 2",
+    "mask_usage": "evaluation only"
+  },
+  "samples": [
+    {
+      "sample_id": "training/000000006",
+      "authentic": {
+        "selected_timestep": 10,
+        "forward_srm_ssim": 0.7219602465629578,
+        "forward_threshold_crossed": false,
+        "aggregation_m": 0,
+        "minimum_reverse_srm_ssim": 0.9975346326828003
+      },
+      "forged": {
+        "selected_timestep": 10,
+        "forward_srm_ssim": 0.721900463104248,
+        "forward_threshold_crossed": false,
+        "aggregation_m": 0,
+        "minimum_reverse_srm_ssim": 0.9982600212097168
+      }
+    }
+  ]
+}

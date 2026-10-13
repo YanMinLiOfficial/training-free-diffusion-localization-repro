@@ -1,0 +1,9 @@
+.DS_Store
+.venv/
+__pycache__/
+*.py[cod]
+models/
+third_party/
+results/**/*.npz
+slurm-*.out
+slurm-*.err
