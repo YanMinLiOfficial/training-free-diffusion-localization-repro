@@ -15,6 +15,29 @@ aggregated. This does not yet match the paper's typical description of a
 reverse curve that first falls and then rises. The 20-image pilot records the
 complete reverse curves to determine whether this is systematic.
 
+## CASIAv1 20-image pilot
+
+The balanced pilot (10 copy-move and 10 splicing samples) completed with exit
+code 0. Adaptive `T` ranged from 36 to 253, with median 118.5. Its localization
+metrics were:
+
+| Aggregation | Pixel AUROC | Pixel AP |
+| --- | ---: | ---: |
+| Pooled pixels | 0.5892 | 0.1073 |
+| Mean per image | 0.5656 | 0.1068 |
+
+The positive-pixel prevalence was 0.0710. Mean scores were 0.001436 inside
+masks and 0.001072 outside, for a positive mean difference of 0.000364.
+
+All 20 reverse trajectories selected `m=0`; their SRM-SSIM curves decreased to
+the final state rather than falling and then rising. Although pooled AUROC is
+numerically close to the paper's full-CASIAv1 value of 0.587, this small,
+balanced pilot uses a different sample composition and fails to reproduce a
+central claimed trajectory behavior. It is therefore not evidence of a
+successful benchmark reproduction. A full 920-image run is intentionally
+deferred until the unspecified similarity metric, SRM/SSIM convention, and
+attention extraction choices are resolved or ablated.
+
 ## Confirmed in the smoke test
 
 The first end-to-end smoke test ran on one NVIDIA L40S with a fixed timestep of

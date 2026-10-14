@@ -1,0 +1,33 @@
+{
+  "samples": 20,
+  "positive_pixel_prevalence": 0.07100808662280701,
+  "pooled_pixel_auc": 0.5892040747761416,
+  "pooled_pixel_ap": 0.10728236873955252,
+  "macro_image_auc": 0.5656207181854476,
+  "macro_image_ap": 0.1067924141994134,
+  "mean_score_inside_mask": 0.0014363982556121306,
+  "mean_score_outside_mask": 0.0010723539948085971,
+  "mean_inside_minus_outside": 0.0003640442608035338,
+  "sample_ids": [
+    "Sp_D_NND_A_nat0022_ani0063_0188",
+    "Sp_D_NNN_A_sec0036_sec0059_0356",
+    "Sp_D_NRN_A_art0022_ani0061_0472",
+    "Sp_S_NNN_R_txt0015_txt0015_0015",
+    "Sp_S_NNN_T_txt0014_txt0014_0014",
+    "Sp_D_NNN_A_pla0055_pla0054_0339",
+    "Sp_D_NNN_A_txt0057_txt0049_0147",
+    "Sp_D_NRN_A_nat0065_art0065_0535",
+    "Sp_S_NNN_R_txt0029_txt0029_0029",
+    "Sp_S_NNN_T_txt0040_txt0040_0040",
+    "Sp_D_NNN_A_pla0088_ani0024_0344",
+    "Sp_D_NRD_A_nat0095_art0058_0582",
+    "Sp_S_NNN_A_pla0092_pla0092_0213",
+    "Sp_S_NNN_R_txt0048_txt0048_0048",
+    "Sp_S_NNN_T_txt0061_txt0061_0061",
+    "Sp_D_NNN_A_sec0032_sec0058_0354",
+    "Sp_D_NRN_A_ani0026_ani0013_0409",
+    "Sp_S_NNN_C_sec0082_sec0082_0044",
+    "Sp_S_NNN_R_txt0071_txt0071_0071",
+    "Sp_S_NNN_T_txt0081_txt0081_0081"
+  ]
+}
