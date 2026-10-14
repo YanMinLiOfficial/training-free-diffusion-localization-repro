@@ -1,5 +1,20 @@
 # Reproduction status
 
+## CASIAv1 adaptive smoke test
+
+One CASIAv1 splicing image was processed with adaptive timestep selection on
+an NVIDIA L40S. It completed in 25 seconds with exit code 0, selected `T=69`,
+and crossed the forward SRM-SSIM threshold at `0.199025`.
+
+The finite 256x256 score map had pixel AUROC `0.6818` and AP `0.1684`, versus
+a positive-pixel prevalence of `0.0959`. Its mean score was `0.000684` inside
+the mask and `0.000355` outside. These single-image values are diagnostic only.
+
+The reverse SRM-SSIM minimum occurred at `m=0`, so only the final error map was
+aggregated. This does not yet match the paper's typical description of a
+reverse curve that first falls and then rises. The 20-image pilot records the
+complete reverse curves to determine whether this is systematic.
+
 ## Confirmed in the smoke test
 
 The first end-to-end smoke test ran on one NVIDIA L40S with a fixed timestep of

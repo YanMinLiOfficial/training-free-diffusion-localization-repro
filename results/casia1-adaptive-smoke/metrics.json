@@ -1,0 +1,14 @@
+{
+  "samples": 1,
+  "positive_pixel_prevalence": 0.09585160818713451,
+  "pooled_pixel_auc": 0.6817584849451173,
+  "pooled_pixel_ap": 0.1684158905325762,
+  "macro_image_auc": 0.6817584849451173,
+  "macro_image_ap": 0.1684158905325762,
+  "mean_score_inside_mask": 0.0006839143906012391,
+  "mean_score_outside_mask": 0.00035469341513000996,
+  "mean_inside_minus_outside": 0.0003292209754712291,
+  "sample_ids": [
+    "Sp_D_NND_A_nat0022_ani0063_0188"
+  ]
+}

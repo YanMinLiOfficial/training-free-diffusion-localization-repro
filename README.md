@@ -60,8 +60,15 @@ have been verified.
 
 ## Manifest format
 
-The current experiment runner evaluates matched authentic/forged pairs. Its
-CSV manifest requires:
+For ordinary localization datasets such as CASIAv1, use one image and mask per
+row:
+
+```csv
+sample_id,image,mask
+Sp_D_NRN_A_cha0005_cha0005_0268,images/Tp/Sp/example.jpg,groundtruth/CASIA 1.0 groundtruth/Sp/example_gt.png
+```
+
+The runner also accepts matched authentic/forged pairs:
 
 ```csv
 sample_id,spec_id,source_dataset,assigned_tool,authentic,image,mask
@@ -70,6 +77,36 @@ example/0001,example-1,dataset,generator,authentic/0001.png,forged/0001.png,mask
 
 Paths are relative to `--dataset-root`. The pair is an evaluation convenience;
 each image is processed independently by the diffusion method.
+
+## CASIAv1 protocol
+
+Prepare deterministic manifests from an extracted CASIAv1 image tree and the
+Pham ground-truth mask mirror:
+
+```bash
+python prepare_casia1.py /path/to/CASIA-v1 \
+  --output-dir manifests/casia1
+```
+
+This produces a 20-image balanced pilot and the complete valid intersection.
+One of 921 tampered images has no matching mask in the mirror, leaving 920
+evaluable samples. Run an array pilot with:
+
+```bash
+sbatch --array=0-3 \
+  --export=ALL,DATASET_ROOT=/path/to/CASIA-v1,MANIFEST=$PWD/manifests/casia1/pilot-20.csv,NUM_SHARDS=4,OUTPUT_DIR=$PWD/results/casia1-pilot \
+  scripts/run_casia1_slurm.sh
+```
+
+After all shards finish:
+
+```bash
+python evaluate_localization.py results/casia1-pilot/shard-*.npz \
+  --output results/casia1-pilot/metrics.json
+```
+
+The evaluator reports both pooled-pixel and macro-image AUC/AP because the
+paper does not state which aggregation convention produced its table values.
 
 ## Run
 
@@ -95,10 +132,10 @@ python -m unittest discover -s tests -v
 
 ## Outputs
 
-The compressed NPZ contains authentic and forged score maps, evaluation masks,
-valid-content masks, sample metadata, selected timesteps, aggregation points,
-and a JSON-encoded protocol record. A separate `*.diagnostics.json` records
-per-image timestep and SSIM diagnostics.
+The compressed NPZ contains score maps, evaluation masks, valid-content masks,
+sample metadata, selected timesteps, aggregation points, and a JSON-encoded
+protocol record. Paired manifests additionally contain authentic score maps.
+A separate `*.diagnostics.json` records per-image timestep and SSIM diagnostics.
 
 ## Important limitations
 

@@ -11,6 +11,7 @@ from __future__ import annotations
 
 import argparse
 import csv
+import hashlib
 import json
 import math
 import sys
@@ -59,6 +60,8 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--model-path", type=Path, required=True)
     parser.add_argument("--seed", type=int, default=11)
     parser.add_argument("--limit", type=int)
+    parser.add_argument("--num-shards", type=int, default=1)
+    parser.add_argument("--shard-index", type=int, default=0)
     parser.add_argument("--fixed-timestep", type=int)
     parser.add_argument("--max-timestep", type=int, default=400)
     parser.add_argument("--timestep-stride", type=int, default=1)
@@ -356,6 +359,12 @@ def aggregate_maps(
     return torch.stack(selected).mean(0), minimum_timestep, similarities[minimum_index]
 
 
+def stable_sample_seed(base_seed: int, sample_id: str) -> int:
+    digest = hashlib.sha256(sample_id.encode("utf-8")).digest()
+    offset = int.from_bytes(digest[:4], "big")
+    return (base_seed + offset) % (2**31)
+
+
 def run_trajectory(
     model,
     diffusion,
@@ -420,11 +429,18 @@ def run_trajectory(
             0.5 * conditional_output["log_variance"]
         ) * step_noise
         state_t = max(0, value - 1)
-        timesteps.append(state_t)
-        maps.append((conditional.float() - unconditional.float()).square().mean(1)[0])
-        similarities.append(
-            ssim(srm_residuals(conditional), srm_residuals(unconditional))
-        )
+        score = (conditional.float() - unconditional.float()).square().mean(1)[0]
+        similarity = ssim(srm_residuals(conditional), srm_residuals(unconditional))
+        # OpenAI's zero-based schedule performs a final model step at t=0.
+        # Replace the preceding q(x_0)-like state so timestep zero contributes
+        # exactly one (final clean) map to Eq. 13's m+1-map average.
+        if state_t == 0 and timesteps and timesteps[-1] == 0:
+            maps[-1] = score
+            similarities[-1] = similarity
+        else:
+            timesteps.append(state_t)
+            maps.append(score)
+            similarities.append(similarity)
 
     score_map, aggregation_m, minimum_ssim = aggregate_maps(
         timesteps, maps, similarities
@@ -435,6 +451,8 @@ def run_trajectory(
         "forward_threshold_crossed": crossed,
         "aggregation_m": aggregation_m,
         "minimum_reverse_srm_ssim": minimum_ssim,
+        "reverse_timesteps": timesteps,
+        "reverse_srm_ssim": similarities,
     }
     return score_map.cpu().numpy().astype(np.float16), diagnostics
 
@@ -443,47 +461,60 @@ def main() -> None:
     args = parse_args()
     if not torch.cuda.is_available():
         raise RuntimeError("CUDA is required")
-    if args.fixed_timestep is not None and not 0 <= args.fixed_timestep < 1000:
-        raise ValueError("fixed-timestep must be in [0, 999]")
+    if args.fixed_timestep is not None and not 1 <= args.fixed_timestep < 1000:
+        raise ValueError("fixed-timestep must be in [1, 999]")
     if not 1 <= args.max_timestep < 1000:
         raise ValueError("max-timestep must be in [1, 999]")
+    if args.num_shards < 1 or not 0 <= args.shard_index < args.num_shards:
+        raise ValueError("shard-index must be in [0, num-shards)")
     model, diffusion, model_config = load_sag(args)
     with args.manifest.open(newline="") as handle:
         rows = list(csv.DictReader(handle))
+    rows = rows[args.shard_index :: args.num_shards]
     if args.limit:
         rows = rows[: args.limit]
+    if not rows:
+        raise ValueError("manifest selection is empty")
+
+    paired_mode = bool(rows[0].get("authentic"))
 
     authentic_maps = []
-    forged_maps = []
+    score_maps = []
     masks = []
     valid_masks = []
     authentic_diagnostics = []
-    forged_diagnostics = []
+    image_diagnostics = []
     for index, row in enumerate(rows, start=1):
-        authentic, authentic_valid = load_image(args.dataset_root / row["authentic"])
-        forged, forged_valid = load_image(args.dataset_root / row["image"])
-        if not np.array_equal(authentic_valid, forged_valid):
-            raise ValueError(f"content boxes differ for {row['sample_id']}")
-        authentic = authentic.to("cuda", dtype=torch.float16)
-        forged = forged.to("cuda", dtype=torch.float16)
-        authentic_map, authentic_info = run_trajectory(
-            model, diffusion, authentic, args, args.seed
+        image, image_valid = load_image(args.dataset_root / row["image"])
+        image = image.to("cuda", dtype=torch.float16)
+        sample_seed = stable_sample_seed(args.seed, row["sample_id"])
+        score_map, image_info = run_trajectory(
+            model, diffusion, image, args, sample_seed
         )
-        forged_map, forged_info = run_trajectory(
-            model, diffusion, forged, args, args.seed
-        )
-        authentic_maps.append(authentic_map)
-        forged_maps.append(forged_map)
+        score_maps.append(score_map)
         masks.append(load_mask(args.dataset_root / row["mask"]))
-        valid_masks.append(forged_valid)
-        authentic_diagnostics.append(authentic_info)
-        forged_diagnostics.append(forged_info)
-        print(
-            f"[{index}/{len(rows)}] {row['sample_id']} "
-            f"T(auth/forged)={authentic_info['selected_timestep']}/"
-            f"{forged_info['selected_timestep']}",
-            flush=True,
-        )
+        valid_masks.append(image_valid)
+        image_diagnostics.append(image_info)
+
+        if paired_mode:
+            authentic, authentic_valid = load_image(
+                args.dataset_root / row["authentic"]
+            )
+            if not np.array_equal(authentic_valid, image_valid):
+                raise ValueError(f"content boxes differ for {row['sample_id']}")
+            authentic = authentic.to("cuda", dtype=torch.float16)
+            authentic_map, authentic_info = run_trajectory(
+                model, diffusion, authentic, args, sample_seed
+            )
+            authentic_maps.append(authentic_map)
+            authentic_diagnostics.append(authentic_info)
+            progress = (
+                f"T(auth/image)={authentic_info['selected_timestep']}/"
+                f"{image_info['selected_timestep']}"
+            )
+        else:
+            progress = f"T={image_info['selected_timestep']}"
+        print(f"[{index}/{len(rows)}] {row['sample_id']} {progress}", flush=True)
 
     protocol = {
         "method": "dual conditional/unconditional reverse diffusion",
@@ -496,10 +527,20 @@ def main() -> None:
         ),
         "model_config": model_config,
         "seed": args.seed,
+        "num_shards": args.num_shards,
+        "shard_index": args.shard_index,
         "forward_ssim_threshold": args.forward_ssim_threshold,
         "fixed_timestep": args.fixed_timestep,
         "max_timestep": args.max_timestep,
         "timestep_stride": args.timestep_stride,
+        "forward_noise_policy": (
+            "one epsilon is reused across adaptive-timestep candidates and "
+            "to initialize the selected reverse trajectory; paper does not specify this"
+        ),
+        "reverse_zero_policy": (
+            "the final model step at t=0 replaces the preceding zero-labeled map, "
+            "so timestep zero contributes once"
+        ),
         "similarity_metric": (
             "negative mean squared error to matched forward x_t; "
             "paper leaves D unspecified"
@@ -513,30 +554,42 @@ def main() -> None:
         "mask_usage": "evaluation only",
     }
     args.output_file.parent.mkdir(parents=True, exist_ok=True)
-    np.savez_compressed(
-        args.output_file,
-        authentic_maps=np.stack(authentic_maps),
-        forged_maps=np.stack(forged_maps),
+    output = dict(
+        score_maps=np.stack(score_maps),
+        forged_maps=np.stack(score_maps),
         masks=np.stack(masks),
         valid_masks=np.stack(valid_masks),
         sample_ids=np.asarray([row["sample_id"] for row in rows]),
-        spec_ids=np.asarray([row["spec_id"] for row in rows]),
-        source_datasets=np.asarray([row["source_dataset"] for row in rows]),
+        spec_ids=np.asarray([row.get("spec_id", row["sample_id"]) for row in rows]),
+        source_datasets=np.asarray(
+            [row.get("source_dataset", "unknown") for row in rows]
+        ),
         generators=np.asarray([row.get("assigned_tool", "unknown") for row in rows]),
-        authentic_selected_timesteps=np.asarray(
-            [item["selected_timestep"] for item in authentic_diagnostics]
+        selected_timesteps=np.asarray(
+            [item["selected_timestep"] for item in image_diagnostics]
         ),
         forged_selected_timesteps=np.asarray(
-            [item["selected_timestep"] for item in forged_diagnostics]
+            [item["selected_timestep"] for item in image_diagnostics]
         ),
-        authentic_aggregation_m=np.asarray(
-            [item["aggregation_m"] for item in authentic_diagnostics]
+        aggregation_m=np.asarray(
+            [item["aggregation_m"] for item in image_diagnostics]
         ),
         forged_aggregation_m=np.asarray(
-            [item["aggregation_m"] for item in forged_diagnostics]
+            [item["aggregation_m"] for item in image_diagnostics]
         ),
         protocol_json=np.asarray(json.dumps(protocol, sort_keys=True)),
     )
+    if paired_mode:
+        output.update(
+            authentic_maps=np.stack(authentic_maps),
+            authentic_selected_timesteps=np.asarray(
+                [item["selected_timestep"] for item in authentic_diagnostics]
+            ),
+            authentic_aggregation_m=np.asarray(
+                [item["aggregation_m"] for item in authentic_diagnostics]
+            ),
+        )
+    np.savez_compressed(args.output_file, **output)
     diagnostics_path = args.output_file.with_suffix(".diagnostics.json")
     diagnostics_path.write_text(
         json.dumps(
@@ -545,11 +598,19 @@ def main() -> None:
                 "samples": [
                     {
                         "sample_id": row["sample_id"],
-                        "authentic": authentic_info,
-                        "forged": forged_info,
+                        "image": image_info,
+                        **(
+                            {"authentic": authentic_info}
+                            if paired_mode
+                            else {}
+                        ),
                     }
-                    for row, authentic_info, forged_info in zip(
-                        rows, authentic_diagnostics, forged_diagnostics
+                    for row, image_info, authentic_info in zip(
+                        rows,
+                        image_diagnostics,
+                        authentic_diagnostics
+                        if paired_mode
+                        else [None] * len(rows),
                     )
                 ],
             },
@@ -557,7 +618,7 @@ def main() -> None:
         )
         + "\n"
     )
-    print(f"Wrote {len(rows)} dual-trajectory pairs to {args.output_file}")
+    print(f"Wrote {len(rows)} dual-trajectory samples to {args.output_file}")
 
 
 if __name__ == "__main__":

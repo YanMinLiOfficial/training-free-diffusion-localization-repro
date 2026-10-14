@@ -10,6 +10,7 @@ from run_dual_trajectory_probe import (
     gaussian_blur,
     srm_residuals,
     ssim,
+    stable_sample_seed,
 )
 
 
@@ -44,6 +45,11 @@ class DualTrajectoryHelpersTest(unittest.TestCase):
         self.assertEqual(timestep, 2)
         self.assertEqual(minimum, 0.2)
         self.assertTrue(torch.allclose(score, torch.full((2, 2), 2.0)))
+
+    def test_sample_seed_is_stable_and_sample_specific(self):
+        first = stable_sample_seed(11, "sample-a")
+        self.assertEqual(first, stable_sample_seed(11, "sample-a"))
+        self.assertNotEqual(first, stable_sample_seed(11, "sample-b"))
 
 
 if __name__ == "__main__":
